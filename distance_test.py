@@ -1,27 +1,11 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForCausalLM , 
 
-def perform_inference(text, model_name='Q-bert/Mamba-130M'):
-    # Load the pre-trained model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name,trust_remote_code=True)
+import numpy as np
+from scipy.stats import entropy
+from scipy.special import softmax
+from sklearn.preprocessing import normalize
 
-    # Tokenize the input text
-    inputs = tokenizer(text, padding=True, truncation=True, return_tensors="pt")
-
-    # Perform inference
-    outputs = model(**inputs)
-    logits = outputs.logits
-    predicted_class = torch.argmax(logits, dim=1).item()
-
-    return logits, predicted_class
-
-# Example usage
-#text = "This is an example sentence."
-#logits, predicted_class = perform_inference(text)
-#print(f"Predicted class: {predicted_class}")
-
-from transformers import AutoModelForCausalLM , AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained('Q-bert/Mamba-130M', trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained('Q-bert/Mamba-130M')
@@ -31,17 +15,12 @@ def get_logits(text):
     logits = model(input_ids)[0].detach().numpy()
     logits = logits[0,:,:]
     return logits
+
 x1 =  get_logits("Hi there, how are you doing today?")
 print(x1.shape)
 
 x2 =  get_logits("Hi here, how were you doing today?")
 print(x2.shape)
-
-import numpy as np
-from scipy.stats import entropy
-from scipy.special import softmax
-from sklearn.preprocessing import normalize
-import numpy as np
 
 
 # upper and lower bounds on relative entropy
@@ -52,13 +31,8 @@ import numpy as np
 def get_bounds(p1,p2):
     lb = 0.5*np.square(np.sum(np.abs(p1-p2), axis=1))
     ub = np.sum(np.square(p1)/p2, axis=1)-1
-
-    
     ub[ub<0] = 0
-    lb[lb<0] = 0
-    
-
-    
+    lb[lb<0] = 0    
     return lb, ub
 
 
@@ -96,15 +70,11 @@ def get_entropy(x1,x2,logits=True, eps=1e-5):
     ind  = np.where(ub2==lb2)
     kl2_scaled[ind]= lb2[ind]
 
-    
-
     return en1, en2, kl1, kl2, lb1, lb2, ub1, ub2, kl1_scaled, kl2_scaled
 
 def distance(x1,x2, k=10):
     
     en1, en2, kl1, kl2, lb1, lb2, ub1, ub2, kl1s, kl2s = get_entropy(x1,x2, logits=True)
-
-
     
     ind = np.argsort(x1,axis=1)
     dp1 = np.take_along_axis(x1, ind, axis=1)
